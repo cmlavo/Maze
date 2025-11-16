@@ -1,0 +1,5 @@
+name,hands,order,charges,dice,number,dmg_mod,atk_mod
+empty weapon,0,0,0,0,0,0,0
+shotgun,1,1,,4,1,0,0
+machine gun,1,2,,6,1,0,0
+2-hand laser gun,2,0,0,6,2,0,0
