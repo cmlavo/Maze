@@ -1,5 +1,14 @@
 name,hands,order,charges,dice,number,dmg_mod,atk_mod
-empty weapon,0,0,0,0,0,0,0
+empty weapon,0,0,,0,0,0,0
 shotgun,1,1,,4,1,0,0
 machine gun,1,2,,6,1,0,0
+laser gun,1,3,,8,1,0,0
+missile launcher,1,5,2,10,1,1,2
+grenade launcher,1,4,4,8,1,0,1
 2-hand laser gun,2,0,0,6,2,0,0
+thermal bomb launcher,1,5,3,6,2,0,2
+guided missile launcher,1,5,2,10,1,1,4
+2-hand machine gun,2,0,,8,1,1,1
+2-hand missile launcher,2,0,5,10,1,1,2
+high-tech laser gun type 1,1,6,,6,3,2,2
+high-tech laser gun type 2,1,6,,8,2,0,4

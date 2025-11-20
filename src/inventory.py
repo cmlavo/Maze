@@ -44,6 +44,10 @@ class Inventory:
                 return item
         return None
     
+    def get_all_weapons(self):
+        """Return a list of all weapons in the inventory."""
+        return [item for item in self.items if isinstance(item, Weapon)]
+
     def copy(self):
         """Return a copy of the inventory."""
         return copy.deepcopy(self)

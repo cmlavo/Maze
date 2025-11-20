@@ -1,0 +1,7 @@
+output:
+  verbose: true
+  log_file: "logs/output.txt"
+
+mc_params:
+  seed: 42
+  num_simulations: 1000

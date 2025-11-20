@@ -6,19 +6,36 @@ import csv
 import os
 from typing import Tuple
 import copy
+from abc import ABC, abstractmethod
 
 from src.inventory import Inventory
-from src.items import Item, Weapon, HealingItem, Vitamins, ElectronicPowerSupport, EmptyWeapon
+from src.items import Item, Weapon, HealingItem, Vitamins, ElectronicPowerSupport, EmptyWeapon, Armour
 from src.dice_roller import DiceRoller
 
-class Entity:
+class Entity(ABC):
     """
-    Base class for all entities in the game.
-    Attributes:
-        name (str): Name of the entity.
+    Abstract class for all entities in the game.
     """
+
+    @abstractmethod
     def __init__(self, name: str):
-        self.name = name    
+        self.name = name
+
+    @abstractmethod
+    def __str__(self):
+        pass
+
+    @abstractmethod
+    def attempt_hit(self, attack_roll: int, damage_roll: int) -> bool:
+        pass    
+
+    @abstractmethod
+    def copy(self):
+        pass
+
+    def copy(self):
+        """Return a copy of the object."""
+        return copy.deepcopy(self)
 
 class Player(Entity):
     """
@@ -26,23 +43,28 @@ class Player(Entity):
     Inherits from PlayerState for state management, and Entity for shared attributes.
     
     Attributes:
-        level (int): Current level of the player
-        inventory (Inventory): Inventory of items the player carries
-        position (int): Current position on the board
+        level (int): Current level of the player        
+        _stats__file (str): Path to the CSV file containing player stats
+        
+        _max_life_points (int): Maximum life_points points        
+        _base_ac (int): Base armour class stat without modifiers
+        _ac_mod (int): Armour class modifier
+        _attack_mod (int): Attack modifier
+        _damage_mod (int): Damage modifier
+        _detection_rate (int): Detection rate stat
+        _unarmed_damage (int): Damage when unarmed
 
         life_points (int): Current life_points points
-        max_life_points (int): Maximum life_points points
-        ac (int): Armour class stat
-        damage (int): Damage stat
-        attack (int): Attack stat
-        detection_rate (int): Detection rate stat
+        ac (int): Current armour class stat
         time_bombs (int): Number of bombs the player has
-        unarmed_damage (int): Damage when unarmed
+        position (int): Current position on the board
 
+        inventory (Inventory): Inventory of items the player carries
         hands (list(Weapon)): List of weapons equipped in hands
+        armour (Armour): Armour equipped by the player
     """
     
-    def __init__(self, name: str, stat_file: str, level: int = 1, inventory: Inventory = None):
+    def __init__(self, name: str, stats_file: str, level: int = 1, inventory: Inventory = None):
         """
         Initialize a Player with stats from CSV file.
         
@@ -54,41 +76,43 @@ class Player(Entity):
         """
         super().__init__(name)
         self.level = level
-        self.position = 0
-        self.inventory = inventory if inventory is not None else Inventory()
-        self.time_bombs = 0
+        self._stats_file = stats_file
+        
+        self.inventory = inventory if inventory is not None else Inventory()        
         self.hands = [None, None]
-        self._load_stats(level, stat_file)
+        self.armour = None        
 
-    def _load_stats(self, level: int, stats_file: str):
+        self._load_stats()
+        self.update_ac()
+        self.life_points = self._max_life_points
+        self.position = 0
+        self.time_bombs = 0
+
+    def _load_stats(self):
         """
         Load player stats from a CSV file based on level.
         
         Args:
             level (int): Player level to load stats for.
-            stats_file (str): Path to the CSV file containing stats.
+            _stats_file (str): Path to the CSV file containing stats.
         """
-        if not os.path.exists(stats_file):
-            raise FileNotFoundError(f"Stats file {stats_file} not found.")
+        if not os.path.exists(self._stats_file):
+            raise FileNotFoundError(f"Stats file {self._stats_file} not found.")
         
-        with open(stats_file, mode='r') as file:
+        with open(self._stats_file, mode='r') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                if int(row['level']) == level:
-                    self.max_life_points = int(row['life_points'])
-                    self.life_points = self.max_life_points
-                    self.ac = int(row['ac'])
-                    self.attack = int(row['attack'])
-                    self.damage = int(row['damage'])
-                    self.detection_rate = int(row['detection_rate'])
-                    self.unarmed_damage = int(row['unarmed_damage'])
+                if int(row['level']) == self.level:
+                    self._max_life_points = int(row['max_life_points'])
+                    self._base_ac = int(row['base_ac'])
+                    self.ac_mod = int(row['ac_mod'])
+                    self._attack_mod = int(row['attack_mod'])
+                    self._damage_mod = int(row['damage_mod'])
+                    self._detection_rate = int(row['detection_rate'])
+                    self._unarmed_damage = int(row['unarmed_damage'])
                     break
             else:
-                raise ValueError(f"No stats found for level {level} in {stats_file}.")
-
-    def copy(self):
-        """Return a copy of the player."""
-        return copy.deepcopy(self)
+                raise ValueError(f"No stats found for level {self.level} in {self.stats_file}.")
 
     def unequip_weapon(self, hand_slot: int) -> Weapon:
         """
@@ -104,25 +128,111 @@ class Player(Entity):
         if weapon is None:
             return None
         else:
-            if weapon.hands == 2:  # if two-handed weapon, unequip both hands
+            if weapon._hands == 2:  # if two-handed weapon, unequip both hands
                 other_hand = (hand_slot + 1) % 2
                 self.hands[other_hand] = None
             self.hands[hand_slot] = None
             self.inventory.add_item(weapon)
         return weapon
 
-    def attack(self, target: Entity) -> bool:
+    def equip_armour(self, armour: Armour = None) -> bool:
+        """
+        Equip armour from inventory. If no armour is specified, equip the first available armour from inventory.
+        Args:
+            armour (Armour): Armour to equip (default None)
+        Returns:
+            bool: True if armour was equipped, False otherwise.
+        """
+        if armour is not None:
+            if armour not in self.inventory.items:
+                return False
+            else:
+                self.unequip_armour()
+                self.armour = armour
+                self.inventory.remove_item(armour)
+                self.update_ac()
+                return True
+            
+        else: # no armour specified - equip first available armour from inventory
+            for item in self.inventory.items:
+                if isinstance(item, Armour):
+                    self.unequip_armour()
+                    self.armour = item
+                    self.inventory.remove_item(item)
+                    self.update_ac()
+                    return True
+                    break
+            return False
+    
+    def unequip_armour(self) -> Armour:
+        """
+        Unequip currently equipped armour and return it to inventory.
+
+        Returns:
+            Armour: The unequipped armour, or None if no armour was equipped.
+        """
+        if self.armour is None:
+            return None
+        else:
+            unequipped_armour = self.armour
+            self.armour = None
+            self.inventory.add_item(unequipped_armour)
+            self.update_ac()
+            return unequipped_armour
+
+    def update_ac(self) -> int:
+        """
+        Update the player's armour class based on equipped armour and modifiers.
+        Returns:
+            int: The updated armour class.
+        """        
+        if self.armour is not None:
+            self.ac = self.armour.ac + self.armour.ac_mod + self.ac_mod
+        else:
+            self.ac = self._base_ac + self.ac_mod
+
+        return self.ac
+
+    def attack(self, target: Entity) -> int:
         """
         Attempt to attack an enemy.
 
         Args:
             target (Entity): The target entity to attack.
         Returns:
-            bool: True if attack hits, False otherwise.
+            tot_damage (int): The amount of damage dealt to the enemy.
         """
-        ...
+        tot_damage = 0
+        if all(hand is None for hand in self.hands): # unarmed attack
+            attack_roll = DiceRoller(sides=20, modifier=self._attack_mod).roll()
+            damage_roll = self._unarmed_damage
+            if target.attempt_hit(attack_roll, damage_roll): tot_damage += damage_roll
+            return tot_damage
+        
+        else: # armed attack
+            for weapon in self.hands: # attack with each weapon available
+                if weapon is not None and not isinstance(weapon, EmptyWeapon): # all bonuses applied from weapons first, then from player
+                    attack_roll, damage_roll = weapon.get_attack()
+                    attack_roll += self._attack_mod
+                    damage_roll += self._damage_mod
+                    if target.attempt_hit(attack_roll, damage_roll): tot_damage += damage_roll
+            return tot_damage
 
-    def give(self, item: Item) -> bool:
+    def attempt_hit(self, attack_roll: int, damage_roll: int) -> bool:
+        """
+        Determine if an incoming attack hits the player, and if so, apply damage.
+        Args:
+            attack_roll (int): The attack roll of the incoming attack.
+            damage_roll (int): The damage roll of the incoming attack.
+        Returns:
+            bool: True if the attack hits, False otherwise.
+        """
+        if attack_roll >= self.ac:
+            self.damage(damage_roll)
+            return True
+        return False
+
+    def give_item(self, item: Item) -> bool:
         """
         Give an item to another player.
 
@@ -133,6 +243,84 @@ class Player(Entity):
         """
         self.inventory.add_item(item)
         return True
+
+    def set_inventory(self, inventory: Inventory):
+        """
+        Set the player's inventory.
+
+        Args:
+            inventory (Inventory): The new inventory to set.
+        """
+        self.inventory = inventory
+
+    def heal(self, amount: int):
+        """
+        Heal the player by a specified amount, not exceeding max life points.R
+        Returns the new life points.
+
+        Args:
+            amount (int): Amount to heal.
+        """
+        self.life_points = min(self.max_life_points, self.life_points + amount)
+        return self.life_points
+    
+    def damage(self, amount: int):
+        """
+        Damage the player by a specified amount, not going below zero life points.
+        Returns the new life points.
+
+        Args:
+            amount (int): Amount of damage.
+        """
+        self.life_points = self.life_points - amount
+        if self.life_points <= 0:
+            self.life_points = 0
+            self.kill()
+        return self.life_points
+
+    def kill(self):
+        """
+        When a player dies, they lose all items in inventory and unequips all weapons. 
+        They lose 1d4 levels, return to max hit points, and go back to start position.
+        """        
+        self.reset_equipment()
+        self.level = max(1, self.level - DiceRoller(sides=4).roll())
+        self._load_stats()
+        self.position = 0
+        self.life_points = self._max_life_points
+
+    def reset_equipment(self):
+        """
+        Clears the player's inventory, gives them the starting weapon and armour, and equips them.
+        """
+        for idx, hand in enumerate(self.hands): self.unequip_weapon(idx)
+        starting_inventory = Inventory([Weapon('shotgun'), Armour('metal jacket')])
+        self.set_inventory(starting_inventory)        
+        self.equip_weapon()
+        self.equip_armour()
+
+    def roll_detection(self) -> bool:
+        """
+        Roll a detection check against the player's detection rate.
+        Returns:
+            bool: True if detection is successful, False otherwise.
+        """
+        roll = DiceRoller(sides=20).roll()
+        return roll <= self._detection_rate
+
+    # Utility methods
+    def __str__(self) -> str:
+        """String representation of the player."""
+        return f"Player: {self.name} (lvl. {self.level})"
+
+    # Abstract methods
+    @abstractmethod
+    def equip_weapon(self, weapon: Weapon = None, override: int = None) -> bool:
+        pass
+
+    @abstractmethod
+    def consume_healing_item(self, healing_item: HealingItem) -> bool:
+        pass    
 
 class Monster(Player):
     """
@@ -206,6 +394,10 @@ class Monster(Player):
         self.inventory.remove_item(healing_item)
         return True
 
+    def __str__(self) -> str:
+        """String representation of the monster."""
+        return f"Player: {self.name} (Lvl. {self.level} Monster)"
+
 class Humanoid(Player):
     """
     Represents a humanoid character in the board game.
@@ -250,7 +442,7 @@ class Humanoid(Player):
         if weapon is not None and weapon not in self.inventory.items: # specified weapon but not in inventory
             return False
                             
-        if weapon.hands == 2: # if a weapon is two-handed, both hands must be free or overridden
+        if weapon._hands == 2: # if a weapon is two-handed, both hands must be free or overridden
             if hand_attr is not None: # overriding a hand; both hands must be overridden
                 # unequip both hands
                 self.unequip_weapon(hand_attr)
@@ -272,7 +464,7 @@ class Humanoid(Player):
                 self.hands[1] = EmptyWeapon()
                 self.inventory.remove_item(weapon)
 
-        elif weapon.hands == 1: # if a weapon is one-handed
+        elif weapon._hands == 1: # if a weapon is one-handed
             if hand_attr is not None: # overriding a hand
                 # check if weapon orders are equal between hands
                 other_hand = (hand_attr + 1) % 2
@@ -323,6 +515,10 @@ class Humanoid(Player):
         self.inventory.remove_item(healing_item)
         return True
 
+    def __str__(self) -> str:
+        """String representation of the humanoid."""
+        return f"Player: {self.name} (Lvl. {self.level} Humanoid)"
+
 class Cyborg(Player):
     """
     Represents a cyborg character in the board game.
@@ -367,7 +563,7 @@ class Cyborg(Player):
         if weapon is not None and weapon not in self.inventory.items: # specified weapon but not in inventory
             return False
                             
-        if weapon.hands == 2: # if a weapon is two-handed, both hands must be free or overridden
+        if weapon._hands == 2: # if a weapon is two-handed, both hands must be free or overridden
             if hand_attr is not None: # overriding a hand; both hands must be overridden
                 # unequip both hands
                 self.unequip_weapon(hand_attr)
@@ -389,7 +585,7 @@ class Cyborg(Player):
                 self.hands[1] = EmptyWeapon()
                 self.inventory.remove_item(weapon)
 
-        elif weapon.hands == 1: # if a weapon is one-handed
+        elif weapon._hands == 1: # if a weapon is one-handed
             if hand_attr is not None: # overriding a hand
                 # check if weapon orders are equal between hands
                 other_hand = (hand_attr + 1) % 2
@@ -437,6 +633,10 @@ class Cyborg(Player):
         self.inventory.remove_item(healing_item)
         return True
 
+    def __str__(self) -> str:
+        """String representation of the cyborg."""
+        return f"Player: {self.name} (Lvl. {self.level} Cyborg)"
+
 class Wartech(Player):
     """
     Represents a wartech character in the board game.
@@ -481,7 +681,7 @@ class Wartech(Player):
         if weapon is not None and weapon not in self.inventory.items: # specified weapon but not in inventory
             return False
                             
-        if weapon.hands == 2: # if a weapon is two-handed, both hands must be free or overridden
+        if weapon._hands == 2: # if a weapon is two-handed, both hands must be free or overridden
             if hand_attr is not None: # overriding a hand; both hands must be overridden
                 # unequip both hands
                 self.unequip_weapon(hand_attr)
@@ -503,7 +703,7 @@ class Wartech(Player):
                 self.hands[1] = EmptyWeapon()
                 self.inventory.remove_item(weapon)
 
-        elif weapon.hands == 1: # if a weapon is one-handed
+        elif weapon._hands == 1: # if a weapon is one-handed
             if hand_attr is not None: # overriding a hand
                 
                 # unequip the specified hand
@@ -544,3 +744,7 @@ class Wartech(Player):
         self.heal(healing_item.get_healing())
         self.inventory.remove_item(healing_item)
         return True
+
+    def __str__(self) -> str:
+        """String representation of the wartech."""
+        return f"Player: {self.name} (Lvl. {self.level} Wartech)"

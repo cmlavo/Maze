@@ -19,6 +19,10 @@ class DiceRoller:
             modifier (int): Modifier to add to the roll. Defaults to 0.
             multiplier (int): Multiplier for the final roll result. Defaults to 1.
         """
+        self.sides = sides
+        self.number = number
+        self.modifier = modifier
+        self.multiplier = multiplier
 
     def roll(self) -> int:
         """

@@ -7,6 +7,7 @@ from src.players import Player, Monster, Humanoid, Cyborg, Wartech
 from src.items import Weapon, Item, WeaponAttachment
 from src.inventory import Inventory
 
+
 # initialise an inventory for testing
 shotgun = Weapon("shotgun")
 machine_gun = Weapon("machine gun")
@@ -31,7 +32,7 @@ for player in players:
     print(f"One-handed equip hands: {player.hands}")
 
     # equipping a two-handed weapon    
-    player.give(two_hand_laser_gun)
+    player.give_item(two_hand_laser_gun)
     print(f"Two-handed give inventory: {player.inventory}")
     player.equip_weapon(two_hand_laser_gun, 0)
     print(f"Two-handed equip inventory: {player.inventory}")

@@ -26,29 +26,30 @@ class Weapon(Item):
     Represents a weapon item.
     Inherits from Item.
 
-    Attributes:
-        hands (int): Number of hands required to wield the weapon (1 or 2).
-        order (int): Weapon order identifier.
+    Attributes:        
         charges (int, optional): Maximum number of charges.
         
-        dice (int): Dice lever rolled for damage calculation.
-        number (int): Number of dice rolled for damage calculation.
-        dmg_mod (int): Damage modifier added to the dice roll.
-        atk_mod (int): Attack modifier added to attack rolls.
+        _hands (int): Number of hands required to wield the weapon (1 or 2).
+        _order (int): Weapon order identifier.
+        _dice (int): Dice lever rolled for damage calculation.
+        _number (int): Number of dice rolled for damage calculation.
+        _dmg_mod (int): Damage modifier added to the dice roll.
+        _atk_mod (int): Attack modifier added to attack rolls.
 
-        weapon_attachment (WeaponAttachment): An instance of WeaponAttachment to apply bonuses to rolls.
+        weapon_upgrade (WeaponUpgrades): An instance of WeaponUpgrades to apply bonuses to rolls.
     """
+
     def __init__(self, name: str):
         super().__init__(name)
         self._load_stats(name)
-        weapon_modifier = None
+        self.weapon_upgrade = None
 
     def _load_stats(self, name: str, stats_file: str = 'data/weapons.csv'):
         """
         Load weapon stats from a CSV file based on level.
         
         Args:
-            level (int): Player level to load stats for.
+            name (str): Name of weapon to load.
             stats_file (str): Path to the CSV file containing stats. Defaults to 'data/weapons.csv'.
         """
         if not os.path.exists(stats_file):
@@ -58,13 +59,13 @@ class Weapon(Item):
             reader = csv.DictReader(file)
             for row in reader:
                 if row['name'] == name:
-                    self.hands = int(row['hands'])
-                    self.order = int(row['order'])
+                    self._hands = int(row['hands'])
+                    self._order = int(row['order'])
                     self.charges = int(row['charges']) if row['charges'] else None
-                    self.dice = int(row['dice'])
-                    self.number = int(row['number'])
-                    self.dmg_mod = int(row['dmg_mod'])
-                    self.atk_mod = int(row['atk_mod'])
+                    self._dice = int(row['dice'])
+                    self._number = int(row['number'])
+                    self._dmg_mod = int(row['dmg_mod'])
+                    self._atk_mod = int(row['atk_mod'])
                     break
             else:
                 raise ValueError(f"No stats found for weapon {name} in {stats_file}.")
@@ -77,11 +78,11 @@ class Weapon(Item):
             attack: Attack roll, including modifiers.
             damage: Damage roll, including modifiers.
         """
-        attack = DiceRoller(sides=20, modifier=self.atk_mod).roll()
-        damage = DiceRoller(sides=self.dice, number=self.number, modifier=self.dmg_mod).roll()
+        attack = DiceRoller(sides=20, modifier=self._atk_mod).roll()
+        damage = DiceRoller(sides=self._dice, number=self._number, modifier=self._dmg_mod).roll()
 
-        if self.weapon_modifier is not None:
-            attack, damage = self.weapon_modifier(attack, damage)
+        if self.weapon_upgrade is not None:
+            attack, damage = self.weapon_upgrade(attack, damage)
 
         return attack, damage
     
@@ -93,7 +94,7 @@ class EmptyWeapon(Weapon):
     def __init__(self):
         super().__init__(name="empty weapon")
 
-class WeaponAttachment(Item):
+class WeaponUpgrades(Item):
     """
     Class to handle weapon attachments that can affect attack and damage rolls.
     """
@@ -142,12 +143,64 @@ class HealingItem(Item):
     """
     Base class for healing items.
     """
-    def __init__(self, name: str, healing):
+    def __init__(self, name: str):
         super().__init__(name)
-        self.healing = healing
+
+    def get_healing(self) -> int:
+        """
+        Rolls and returns the amount healed.
+        """
+        return DiceRoller(sides=6, number=2).roll()
 
 class Vitamins(HealingItem):
-    ...
+    """
+    Represents a vitamins healing item.
+    Inherits from HealingItem.
+    """
+
+    def __init__(self):
+        super().__init__("vitamins")
 
 class ElectronicPowerSupport(HealingItem):
-    ...
+    """
+    Represents an electronic power support healing item.
+    Inherits from HealingItem.
+    """
+
+    def __init__(self):
+        super().__init__("electronic power support")
+
+class Armour(Item):
+    """
+    Represents an armour item.
+    Inherits from Item.
+    Attributes:
+        ac (int): Armour class provided by the armour.
+        ac_mod (int): Armour class modifier.
+
+        armour_upgrade (ArmourUpgrade): An instance of ArmourUpgrade to apply bonuses to AC.
+    """
+    def __init__(self, name: str):
+        super().__init__(name)
+        self._load_stats(name)
+        self.ac_mod = 0
+
+    def _load_stats(self, name: str, stats_file: str = 'data/armours.csv'):
+        """
+        Load armour stats from a CSV file.
+        
+        Args:
+            name (str): Name of armour to load.
+            stats_file (str): Path to the CSV file containing stats. Defaults to 'data/armours.csv'.
+        """
+        if not os.path.exists(stats_file):
+            raise FileNotFoundError(f"Stats file {stats_file} not found.")
+        
+        with open(stats_file, mode='r') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                if row['name'] == name:
+                    self.ac = int(row['ac'])
+                    break
+            else:
+                raise ValueError(f"No stats found for armour {name} in {stats_file}.")
