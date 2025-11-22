@@ -1,0 +1,16 @@
+name,max_life_points,attack_mod,ac,damage_dice,num_attacks
+animal tech,5,5,12,[4],1
+fighting machine,5,7,13,[6],1
+human 1,7,2,12,[4],1
+flying tech,8,1,15,[6],1
+humanoid 1,8,3,12,[6],1
+animal cyborg,
+monster,
+cyborg 1,
+spider tech,
+human 2,
+cyborg 2,
+tech,
+humanoid 2,
+alien,
+guardian,

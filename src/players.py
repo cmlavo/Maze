@@ -27,7 +27,11 @@ class Entity(ABC):
 
     @abstractmethod
     def attempt_hit(self, attack_roll: int, damage_roll: int) -> bool:
-        pass    
+        pass
+
+    @abstractmethod
+    def damage(self, damage: int) -> bool:
+        pass  
 
     @abstractmethod
     def copy(self):
@@ -58,6 +62,7 @@ class Player(Entity):
         ac (int): Current armour class stat
         time_bombs (int): Number of bombs the player has
         position (int): Current position on the board
+        on_guard (bool): Whether the player is on guard
 
         inventory (Inventory): Inventory of items the player carries
         hands (list(Weapon)): List of weapons equipped in hands
@@ -87,6 +92,7 @@ class Player(Entity):
         self.life_points = self._max_life_points
         self.position = 0
         self.time_bombs = 0
+        self.on_guard = False
 
     def _load_stats(self):
         """
@@ -193,7 +199,7 @@ class Player(Entity):
 
         return self.ac
 
-    def attack(self, target: Entity) -> int:
+    def attack(self, target: Entity) -> Tuple[int, bool]:
         """
         Attempt to attack an enemy.
 
@@ -201,13 +207,15 @@ class Player(Entity):
             target (Entity): The target entity to attack.
         Returns:
             tot_damage (int): The amount of damage dealt to the enemy.
+            killed (bool): True if the target was killed, False otherwise.
         """
         tot_damage = 0
         if all(hand is None for hand in self.hands): # unarmed attack
             attack_roll = DiceRoller(sides=20, modifier=self._attack_mod).roll()
             damage_roll = self._unarmed_damage
-            if target.attempt_hit(attack_roll, damage_roll): tot_damage += damage_roll
-            return tot_damage
+            hit, kill = target.attempt_hit(attack_roll, damage_roll)
+            if hit: tot_damage += damage_roll
+            return tot_damage, kill
         
         else: # armed attack
             for weapon in self.hands: # attack with each weapon available
@@ -215,8 +223,11 @@ class Player(Entity):
                     attack_roll, damage_roll = weapon.get_attack()
                     attack_roll += self._attack_mod
                     damage_roll += self._damage_mod
-                    if target.attempt_hit(attack_roll, damage_roll): tot_damage += damage_roll
-            return tot_damage
+                    hit, kill = target.attempt_hit(attack_roll, damage_roll)
+                    if hit: tot_damage += damage_roll
+                    if kill: 
+                        return tot_damage, kill
+            return tot_damage, kill
 
     def attempt_hit(self, attack_roll: int, damage_roll: int) -> bool:
         """
@@ -225,12 +236,14 @@ class Player(Entity):
             attack_roll (int): The attack roll of the incoming attack.
             damage_roll (int): The damage roll of the incoming attack.
         Returns:
-            bool: True if the attack hits, False otherwise.
+            hit (bool): True if the attack hits, False otherwise.
+            kill (bool): True if the player was killed, False otherwise.
         """
+        hit, kill = False, False
         if attack_roll >= self.ac:
-            self.damage(damage_roll)
-            return True
-        return False
+            hit = True
+            if self.damage(damage_roll): kill = True
+        return hit, kill
 
     def give_item(self, item: Item) -> bool:
         """
@@ -264,19 +277,22 @@ class Player(Entity):
         self.life_points = min(self.max_life_points, self.life_points + amount)
         return self.life_points
     
-    def damage(self, amount: int):
+    def damage(self, amount: int) -> int:
         """
         Damage the player by a specified amount, not going below zero life points.
         Returns the new life points.
 
         Args:
-            amount (int): Amount of damage.
+            amount (int): Amount of damage to apply.
+        Returns:
+            bool: True if the player was killed, False otherwise.
         """
         self.life_points = self.life_points - amount
         if self.life_points <= 0:
             self.life_points = 0
             self.kill()
-        return self.life_points
+            return True
+        return False
 
     def kill(self):
         """
@@ -308,10 +324,26 @@ class Player(Entity):
         roll = DiceRoller(sides=20).roll()
         return roll <= self._detection_rate
 
+    def time_bomb_check(self) -> bool:
+        """
+        Roll a check to see if the time bomb hurts the player, take damage if so.
+        Returns:
+            bool: True if the player is hurt by the time bomb, False otherwise.
+        """
+
+        if not self.roll_detection():
+            self.damage(DiceRoller(sides=6, number=2).roll())
+            return True
+        return False
+
     # Utility methods
     def __str__(self) -> str:
         """String representation of the player."""
         return f"Player: {self.name} (lvl. {self.level})"
+
+    def copy(self):
+        """Return a copy of the object."""
+        return copy.deepcopy(self)
 
     # Abstract methods
     @abstractmethod
